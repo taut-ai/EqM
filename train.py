@@ -5,9 +5,6 @@
 A minimal training script for EqM using PyTorch DDP.
 """
 import torch
-# the first flag below was False when we tested this script but True makes A100 training a lot faster:
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
@@ -23,20 +20,16 @@ from time import time
 import argparse
 import logging
 import os
-from tqdm import tqdm
 from models import EqM_models
 from download import find_model
-from transport import create_transport, Sampler
+from transport import create_transport
 from diffusers.models import AutoencoderKL
 from train_utils import parse_transport_args
 import wandb_utils
-from torchvision import datasets, transforms, models
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_auc_score
-import torchvision.transforms.functional as TF
-from torchvision.transforms.functional import to_pil_image
-from pathlib import Path
-import torch.nn.functional as F
+
+# the first flag below was False when we tested this script but True makes A100 training a lot faster:
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 #################################################################################
 #                             Training Helper Functions                         #
@@ -127,14 +120,15 @@ def main(args):
         torch.backends.cuda.enable_math_sdp(True)
     # Setup DDP:
     dist.init_process_group("nccl")
-    assert args.global_batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
+    assert args.global_batch_size % dist.get_world_size() == 0, "Batch size must be divisible by world size."
     rank = dist.get_rank()
     device = int(os.environ["LOCAL_RANK"])
     print(f"Found {n_gpus} GPUs, trying to use device index {device}")
     seed = args.global_seed * dist.get_world_size() + rank
     torch.manual_seed(seed)
     torch.cuda.set_device(device)
-    print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.")
+    print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}, "
+          f"global_batch_size={args.global_batch_size}")
     local_batch_size = int(args.global_batch_size // dist.get_world_size())
 
     # Setup an experiment folder:
@@ -157,12 +151,59 @@ def main(args):
     else:
         logger = create_logger(None)
 
+    # Setup data:
+    transform = transforms.Compose([
+        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
+    ])
+
+    if args.dataset == "folder":
+        # Original behavior: expect ImageNet-style folder layout
+        #   args.data_path/train/<class>/image.jpg
+        dataset = ImageFolder(args.data_path, transform=transform)
+        num_classes = len(dataset.classes)
+    elif args.dataset == "hf-imagenet":
+        try:
+            from hf_imagenet import HFImageNetDataset
+        except ImportError as exc:
+            raise ImportError(
+                "HF ImageNet backend requires the 'datasets' package. Install it via `pip install datasets`."
+            ) from exc
+        dataset = HFImageNetDataset(
+            split="train",
+            cache_dir=args.data_path,
+            transform=transform,
+        )
+        num_classes = dataset.num_classes
+    else:
+        raise ValueError(f"Unknown dataset type: {args.dataset}")
+
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=dist.get_world_size(),
+        rank=rank,
+        shuffle=True,
+        seed=args.global_seed
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=local_batch_size,
+        shuffle=False,
+        sampler=sampler,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=True
+    )
+    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
+
     # Create model:
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.image_size // 8
     model = EqM_models[args.model](
         input_size=latent_size,
-        num_classes=args.num_classes,
+        num_classes=num_classes,
         uncond=args.uncond,
         ebm=args.ebm
     ).to(device)
@@ -185,6 +226,7 @@ def main(args):
         ema = ema.to(device)
         model = model.to(device)
     requires_grad(ema, False)
+    logger.info(f"EqM Parameters: {sum(p.numel() for p in model.parameters()):,}")
     model = DDP(model, device_ids=[device])
     transport = create_transport(
         args.path_type,
@@ -192,40 +234,8 @@ def main(args):
         args.loss_weight,
         args.train_eps,
         args.sample_eps
-    )  # default: velocity; 
-    transport_sampler = Sampler(transport)
+    )  # default: velocity;
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
-    logger.info(f"EqM Parameters: {sum(p.numel() for p in model.parameters()):,}")
-
-    # Setup optimizer (we used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper):
-
-    # Setup data:
-    transform = transforms.Compose([
-        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
-    ])
-    dataset = ImageFolder(args.data_path, transform=transform)
-    sampler = DistributedSampler(
-        dataset,
-        num_replicas=dist.get_world_size(),
-        rank=rank,
-        shuffle=True,
-        seed=args.global_seed
-    )
-    loader = DataLoader(
-        dataset,
-        batch_size=local_batch_size,
-        shuffle=False,
-        sampler=sampler,
-        num_workers=args.num_workers,
-        pin_memory=True,
-        drop_last=True
-    )
-    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
-
-    # Prepare models for training:
     update_ema(ema, model.module, decay=0)  # Ensure EMA is initialized with synced weights
     model.train()  # important! This enables embedding dropout for classifier-free guidance
     ema.eval()  # EMA model should always be in eval mode
@@ -236,24 +246,6 @@ def main(args):
     running_loss = 0
     start_time = time()
 
-    # Labels to condition the model with (feel free to change):
-    ys = torch.randint(1000, size=(local_batch_size,), device=device)
-    use_cfg = args.cfg_scale > 1.0
-    # Create sampling noise:
-    n = ys.size(0)
-    zs = torch.randn(n, 4, latent_size, latent_size, device=device)
-
-    # Setup classifier-free guidance:
-    if use_cfg:
-        zs = torch.cat([zs, zs], 0)
-        y_null = torch.tensor([1000] * n, device=device)
-        ys = torch.cat([ys, y_null], 0)
-        sample_model_kwargs = dict(y=ys, cfg_scale=args.cfg_scale)
-        model_fn = ema.forward_with_cfg
-    else:
-        sample_model_kwargs = dict(y=ys)
-        model_fn = ema.forward
-    
     logger.info(f"Training for {args.epochs} epochs...")
     for epoch in range(args.epochs):
         sampler.set_epoch(epoch)
@@ -324,7 +316,6 @@ if __name__ == "__main__":
     parser.add_argument("--results-dir", type=str, default="results")
     parser.add_argument("--model", type=str, choices=list(EqM_models.keys()), default="EqM-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
-    parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=80)
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--global-seed", type=int, default=0)
@@ -342,6 +333,13 @@ if __name__ == "__main__":
                         help="disable/enable noise conditioning")
     parser.add_argument("--ebm", type=str, choices=["none", "l2", "dot", "mean"], default="none",
                         help="energy formulation")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="folder",
+        choices=["folder", "hf-imagenet"],
+        help="Dataset backend: 'folder' for ImageFolder, 'hf-imagenet' for HuggingFace resized ImageNet.",
+    )
 
     parse_transport_args(parser)
     args = parser.parse_args()

@@ -1,0 +1,18 @@
+[[34m2025-12-03 11:13:14[0m] Experiment directory created at results/006-EqM-XL-2-Linear-velocity-None
+[[34m2025-12-03 11:13:14[0m] HTTP Request: HEAD https://huggingface.co/datasets/evanarlian/imagenet_1k_resized_256/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+[[34m2025-12-03 11:13:14[0m] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/evanarlian/imagenet_1k_resized_256/8de107e08d1f61884d5a4ec2dea8740667264a60/README.md "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:14[0m] HTTP Request: HEAD https://huggingface.co/datasets/evanarlian/imagenet_1k_resized_256/resolve/8de107e08d1f61884d5a4ec2dea8740667264a60/imagenet_1k_resized_256.py "HTTP/1.1 404 Not Found"
+[[34m2025-12-03 11:13:14[0m] HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/evanarlian/imagenet_1k_resized_256/evanarlian/imagenet_1k_resized_256.py "HTTP/1.1 404 Not Found"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: GET https://huggingface.co/api/datasets/evanarlian/imagenet_1k_resized_256/revision/8de107e08d1f61884d5a4ec2dea8740667264a60 "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: HEAD https://huggingface.co/datasets/evanarlian/imagenet_1k_resized_256/resolve/8de107e08d1f61884d5a4ec2dea8740667264a60/.huggingface.yaml "HTTP/1.1 404 Not Found"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=evanarlian/imagenet_1k_resized_256 "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: GET https://huggingface.co/api/datasets/evanarlian/imagenet_1k_resized_256/tree/8de107e08d1f61884d5a4ec2dea8740667264a60/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: GET https://huggingface.co/api/datasets/evanarlian/imagenet_1k_resized_256/tree/8de107e08d1f61884d5a4ec2dea8740667264a60?recursive=false&expand=false "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:15[0m] HTTP Request: HEAD https://huggingface.co/datasets/evanarlian/imagenet_1k_resized_256/resolve/8de107e08d1f61884d5a4ec2dea8740667264a60/dataset_infos.json "HTTP/1.1 404 Not Found"
+[[34m2025-12-03 11:13:15[0m] Dataset contains 1,281,167 images (/opt/imagenet_hf)
+[[34m2025-12-03 11:13:21[0m] EqM Parameters: 675,129,632
+[[34m2025-12-03 11:13:21[0m] HTTP Request: HEAD https://huggingface.co/stabilityai/sd-vae-ft-ema/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[[34m2025-12-03 11:13:21[0m] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/stabilityai/sd-vae-ft-ema/f04b2c4b98319346dad8c65879f680b1997b204a/config.json "HTTP/1.1 200 OK"
+[[34m2025-12-03 11:13:21[0m] HTTP Request: HEAD https://huggingface.co/stabilityai/sd-vae-ft-ema/resolve/f04b2c4b98319346dad8c65879f680b1997b204a/diffusion_pytorch_model.safetensors.index.json "HTTP/1.1 404 Not Found"
+[[34m2025-12-03 11:13:21[0m] Training for 80 epochs...
+[[34m2025-12-03 11:13:21[0m] Beginning epoch 0...
