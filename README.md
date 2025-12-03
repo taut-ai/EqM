@@ -18,44 +18,31 @@ We implement Equilibrium Matching on top of the [Dispersive Loss](https://github
 Run the following script to setup environment.
 
 ```bash
-git clone https://github.com/raywang4/EqM.git
+git clone https://github.com/taut-ai/EqM.git
 cd EqM
-conda env create -f environment.yml
-conda activate EqM
+./install.sh
 ```
 
+Anytime you want to then run the EqM model training:
+
+```bash
+cd EqM
+conda activate EqM
+```
 
 ## Training
 
 To train an Equilibrium Matching (EqM) model, use the following training script:
 
 ```bash
-torchrun --nnodes=1 --nproc_per_node=N train.py --model EqM-XL/2 --data-path /path/to/imagenet/train
+torchrun --nnodes=1 --nproc_per_node=$(python -c "import torch; print(torch.cuda.device_count())") train.py --dataset hf-imagenet --model EqM-XL/2 --data-path /opt/imagenet_hf --global-batch-size=$(($(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | sort -n | head -n1) / 2730))
 ```
 
-To train an Equilibrium Matching model with explicit energy (EqM-E) with dot product parameterization, use the following script:
+To train an Equilibrium Matching model with explicit energy (EqM-E) with dot product parameterization, use the above command with `--ebm dot`
 
-```bash
-torchrun --nnodes=1 --nproc_per_node=N train.py --model EqM-XL/2 --data-path /path/to/imagenet/train --ebm dot
-```
+**Logging.** To enable `wandb`, firstly set `WANDB_KEY`, `ENTITY`, and `PROJECT` as environment variables in your Conda install's `etc/conda/activate.d/wandb_env.sh`. Then in training command add the `--wandb` flag:
 
-**Logging.** To enable `wandb`, firstly set `WANDB_KEY`, `ENTITY`, and `PROJECT` as environment variables:
-
-```bash
-export WANDB_KEY="key"
-export ENTITY="entity name"
-export PROJECT="project name"
-```
-Then in training command add the `--wandb` flag:
-
-```bash
-torchrun --nnodes=1 --nproc_per_node=N train.py --model EqM-XL/2 --data-path /path/to/imagenet/train --disp --wandb
-```
-**Resume training.** To resume training from custom checkpoint:
-
-```bash
-torchrun --nnodes=1 --nproc_per_node=N train.py --model EqM-XL/2 --data-path /path/to/imagenet/train --ckpt /path/to/model.pt
-```
+**Resume training.** To resume training from custom checkpoint, use the above command with `--ckpt /path/to/model.pt`
 
 ## Sampling
 

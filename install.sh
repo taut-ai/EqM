@@ -4,7 +4,6 @@ set -euo pipefail
 ### CONFIG #############################################################
 
 MINICONDA_DIR="${HOME}/miniconda3"
-EQM_REPO_URL="https://github.com/taut-ai/EqM.git"
 EQM_UPSTREAM_URL="https://github.com/raywang4/EqM.git"
 EQM_ENV_NAME="EqM"   # Assumes environment.yml names it "EqM"
 
@@ -80,19 +79,26 @@ eval "${__conda_setup}"
 unset __conda_setup
 
 #######################################################################
-# 4. Clone EqM repo and set upstream
+# 4. Confirm we are inside the EqM repository
 #######################################################################
 
-cd "${HOME}"
+REPO_ROOT="$(pwd)"
 
-if [ ! -d "EqM" ]; then
-  echo "Cloning ${EQM_REPO_URL} into ${HOME}/EqM..."
-  git clone "${EQM_REPO_URL}"
-else
-  echo "EqM directory already exists; skipping clone."
+if [ ! -f "${REPO_ROOT}/environment.yml" ] || [ ! -d "${REPO_ROOT}/.git" ]; then
+  cat >&2 <<'EOF'
+ERROR: Please run this script from the root of your already-cloned EqM repo.
+
+Example:
+  git clone https://github.com/taut-ai/EqM.git
+  cd EqM
+  ./install.sh
+EOF
+  exit 1
 fi
 
-cd EqM
+#######################################################################
+# 5. Ensure upstream remote exists
+#######################################################################
 
 if git remote | grep -qx 'upstream'; then
   echo "Git remote 'upstream' already exists; skipping add."
@@ -108,7 +114,7 @@ echo "  git fetch upstream && git merge upstream/main && git push"
 echo
 
 #######################################################################
-# 5. Create / update conda environment from environment.yml
+# 6. Create / update conda environment from environment.yml
 #######################################################################
 
 echo "Ensuring conda environment '${EQM_ENV_NAME}' exists..."
@@ -130,7 +136,7 @@ if [ -z "${CONDA_PREFIX:-}" ]; then
 fi
 
 #######################################################################
-# 6. Install extra Python deps
+# 7. Install extra Python deps
 #######################################################################
 
 echo "Installing additional Python dependencies into '${EQM_ENV_NAME}'..."
@@ -140,7 +146,7 @@ pip install datasets
 conda install -y -c conda-forge matplotlib scikit-learn
 
 #######################################################################
-# 7. Create stub libittnotify.so and preload hooks
+# 8. Create stub libittnotify.so and preload hooks
 #######################################################################
 
 echo "Creating libittnotify.so stub in ${CONDA_PREFIX}/lib ..."
@@ -183,7 +189,7 @@ unset _OLD_LD_PRELOAD
 EOF
 
 #######################################################################
-# 8. Set dummy Weights & Biases env vars via conda hooks
+# 9. Set dummy Weights & Biases env vars via conda hooks
 #######################################################################
 
 echo "Configuring dummy Weights & Biases environment variables..."
@@ -201,7 +207,7 @@ unset WANDB_KEY
 EOF
 
 #######################################################################
-# 9. Done
+# 10. Done
 #######################################################################
 
 cat <<EOF
@@ -210,12 +216,12 @@ cat <<EOF
 Setup complete.
 
 Conda env:   ${EQM_ENV_NAME}
-Repo path:   ${HOME}/EqM
+Repo path:   ${REPO_ROOT}
 ImageNet dir: /opt/imagenet_hf (verified existing)
 
 From a new shell, you can do:
 
-  cd ~/EqM
+  cd ${REPO_ROOT}
   conda activate ${EQM_ENV_NAME}
 
 LD_PRELOAD and WANDB dummy env vars will be handled automatically
